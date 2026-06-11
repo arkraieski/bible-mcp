@@ -1,0 +1,5 @@
+fastmcp
+sqlite-vec
+sentence-transformers
+lxml
+tqdm
