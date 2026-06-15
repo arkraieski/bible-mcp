@@ -32,7 +32,9 @@ mcp = FastMCP("Bible", lifespan=lifespan)
 
 @mcp.tool
 def get_verse(translation: str, book: str, chapter: int, verse: int) -> dict:
-    """Look up a specific Bible verse by exact reference."""
+    """Look up a specific Bible verse by reference. 'book' accepts full names,
+    common abbreviations, or OSIS IDs — e.g. 'Genesis', 'Gen', 'ge', 'First Samuel',
+    'Song of Songs', 'Rev' all work. Case-insensitive."""
     conn = db.get_cached_connection(DB_PATH)
     result = db.db_get_verse(conn, translation, book, chapter, verse)
     if result is None:
@@ -43,7 +45,8 @@ def get_verse(translation: str, book: str, chapter: int, verse: int) -> dict:
 @mcp.tool
 def get_passage(translation: str, book: str, chapter: int,
                 verse_start: int, verse_end: int) -> dict:
-    """Retrieve a range of verses from a single chapter."""
+    """Retrieve a range of verses from a single chapter. 'book' accepts full names,
+    common abbreviations, or OSIS IDs. Case-insensitive."""
     conn = db.get_cached_connection(DB_PATH)
     rows = db.db_get_passage(conn, translation, book, chapter, verse_start, verse_end)
     if not rows:

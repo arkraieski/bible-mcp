@@ -1,5 +1,7 @@
 .venv/
 bible.db
+bible.db-shm
+bible.db-wal
 __pycache__/
 *.pyc
 .DS_Store

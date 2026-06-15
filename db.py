@@ -4,6 +4,8 @@ from typing import Optional
 
 import sqlite_vec
 
+from books import resolve_book
+
 _conn: Optional[sqlite3.Connection] = None
 _model = None
 
@@ -89,6 +91,9 @@ def _get_model():
 
 def db_get_verse(conn: sqlite3.Connection, translation: str, osis_id: str,
                  chapter: int, verse: int):
+    osis_id = resolve_book(osis_id)
+    if osis_id is None:
+        return None
     return conn.execute(
         """
         SELECT t.abbreviation AS translation, b.name AS book, b.osis_id,
@@ -104,6 +109,9 @@ def db_get_verse(conn: sqlite3.Connection, translation: str, osis_id: str,
 
 def db_get_passage(conn: sqlite3.Connection, translation: str, osis_id: str,
                    chapter: int, verse_start: int, verse_end: int):
+    osis_id = resolve_book(osis_id)
+    if osis_id is None:
+        return []
     return conn.execute(
         """
         SELECT v.verse, v.text
