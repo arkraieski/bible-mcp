@@ -126,9 +126,25 @@ def db_get_passage(conn: sqlite3.Connection, translation: str, osis_id: str,
     ).fetchall()
 
 
-def db_search_text(conn: sqlite3.Connection, translation: str, query: str, limit: int):
+_TESTAMENT_MAP = {
+    "ot": "OT", "old": "OT", "old testament": "OT",
+    "nt": "NT", "new": "NT", "new testament": "NT",
+}
+
+
+def resolve_testament(testament: Optional[str]) -> Optional[str]:
+    """Normalize a testament string to 'OT' or 'NT', or None if not provided."""
+    if testament is None:
+        return None
+    resolved = _TESTAMENT_MAP.get(testament.strip().lower())
+    return resolved  # None means unrecognized — callers should treat as invalid
+
+
+def db_search_text(conn: sqlite3.Connection, translation: str, query: str,
+                   limit: int, testament: Optional[str] = None):
+    t_filter = f"AND b.testament = '{testament}'" if testament else ""
     return conn.execute(
-        """
+        f"""
         SELECT b.name AS book, b.osis_id, v.chapter, v.verse, v.text,
                verses_fts.rank AS score
         FROM verses_fts
@@ -136,6 +152,7 @@ def db_search_text(conn: sqlite3.Connection, translation: str, query: str, limit
         JOIN books b ON b.id = v.book_id
         JOIN translations t ON t.id = v.translation_id
         WHERE verses_fts MATCH ? AND t.abbreviation = ?
+          {t_filter}
         ORDER BY verses_fts.rank
         LIMIT ?
         """,
@@ -144,25 +161,39 @@ def db_search_text(conn: sqlite3.Connection, translation: str, query: str, limit
 
 
 def db_search_semantic(conn: sqlite3.Connection, query_text: str,
-                       translation: str, limit: int):
+                       translation: str, limit: int,
+                       testament: Optional[str] = None):
     model = _get_model()
     embedding = model.encode(query_text, convert_to_numpy=True)
     blob = sqlite_vec.serialize_float32(embedding.tolist())
-    k = limit * 4
+
+    if testament:
+        rowid_filter = """
+            SELECT v2.id FROM verses v2
+            JOIN books b2 ON b2.id = v2.book_id
+            JOIN translations t2 ON t2.id = v2.translation_id
+            WHERE t2.abbreviation = ? AND b2.testament = ?"""
+        params = (translation, testament, blob, limit, limit)
+    else:
+        rowid_filter = """
+            SELECT v2.id FROM verses v2
+            JOIN translations t2 ON t2.id = v2.translation_id
+            WHERE t2.abbreviation = ?"""
+        params = (translation, blob, limit, limit)
+
     return conn.execute(
-        """
+        f"""
         SELECT ve.verse_id, ve.distance, v.chapter, v.verse, v.text,
                b.name AS book, b.osis_id
         FROM verse_embeddings ve
         JOIN verses v ON v.id = ve.verse_id
         JOIN books b ON b.id = v.book_id
-        JOIN translations t ON t.id = v.translation_id
-        WHERE ve.embedding MATCH ? AND k = ?
-          AND t.abbreviation = ?
+        WHERE ve.verse_id IN ({rowid_filter})
+          AND ve.embedding MATCH ? AND k = ?
         ORDER BY ve.distance
         LIMIT ?
         """,
-        (blob, k, translation, limit),
+        params,
     ).fetchall()
 
 

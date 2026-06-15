@@ -60,10 +60,15 @@ def get_passage(translation: str, book: str, chapter: int,
 
 
 @mcp.tool
-def search_text(translation: str, query: str, limit: int = 10) -> dict:
-    """Full-text keyword search across all verses in a translation."""
+def search_text(translation: str, query: str, limit: int = 10,
+                testament: str = None) -> dict:
+    """Full-text keyword search across all verses in a translation.
+    Optional 'testament' filters to 'old' or 'new' testament (also accepts 'OT'/'NT')."""
+    t = db.resolve_testament(testament)
+    if testament is not None and t is None:
+        return {"error": f"Unknown testament: {testament!r}. Use 'old' or 'new'."}
     conn = db.get_cached_connection(DB_PATH)
-    rows = db.db_search_text(conn, translation, query, limit)
+    rows = db.db_search_text(conn, translation, query, limit, t)
     return {
         "results": [
             {
@@ -80,10 +85,15 @@ def search_text(translation: str, query: str, limit: int = 10) -> dict:
 
 
 @mcp.tool
-def search_semantic(query: str, translation: str = "web", limit: int = 10) -> dict:
-    """Semantic similarity search using sentence-transformer vector embeddings."""
+def search_semantic(query: str, translation: str = "web", limit: int = 10,
+                    testament: str = None) -> dict:
+    """Semantic similarity search using sentence-transformer vector embeddings.
+    Optional 'testament' filters to 'old' or 'new' testament (also accepts 'OT'/'NT')."""
+    t = db.resolve_testament(testament)
+    if testament is not None and t is None:
+        return {"error": f"Unknown testament: {testament!r}. Use 'old' or 'new'."}
     conn = db.get_cached_connection(DB_PATH)
-    rows = db.db_search_semantic(conn, query, translation, limit)
+    rows = db.db_search_semantic(conn, query, translation, limit, t)
     return {
         "results": [
             {
