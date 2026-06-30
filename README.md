@@ -38,12 +38,27 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 |---|---|
 | `get_verse` | Exact verse lookup by reference |
 | `get_passage` | Range of verses from a chapter |
+| `get_cross_references` | TSK-derived cross-references for a verse, with optional vote-count filtering |
 | `search_text` | FTS5 keyword search |
 | `search_semantic` | Vector similarity search |
 | `list_translations` | Show available translations (`web`, `kjv`) |
 | `list_books` | List books for a translation |
 
 Books are identified by OSIS ID (e.g. `Gen`, `Matt`, `Rev`).
+
+## Cross-references
+
+Cross-reference data is **not bundled** — fetch and load it separately after the initial setup:
+
+```bash
+.venv/bin/python scripts/ingest_cross_references.py
+```
+
+This downloads the dataset from OpenBible.info (~4 MB), parses it, and writes into the local `bible.db`. Re-running the command is safe (existing data is replaced).
+
+### Attribution
+
+Cross-reference data sourced from **[OpenBible.info](https://openbible.info)** ([CC BY 4.0](https://openbible.info/source.htm)), derived from the public-domain *Treasury of Scripture Knowledge*. The dataset is not bundled with this project; users run the ingestion script to populate it locally.
 
 ## Adding more translations
 

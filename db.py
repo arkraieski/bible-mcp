@@ -18,11 +18,11 @@ def get_connection(db_path: str) -> sqlite3.Connection:
         conn.enable_load_extension(False)
     except AttributeError:
         print("ERROR: sqlite-vec requires a Python build with extension loading support.", file=sys.stderr)
-        print("Use Homebrew Python: source .venv/bin/activate", file=sys.stderr)
+        print("Ensure you are using the project virtualenv: source .venv/bin/activate", file=sys.stderr)
         sys.exit(1)
     except sqlite3.OperationalError as e:
         print(f"ERROR: Failed to load sqlite-vec extension: {e}", file=sys.stderr)
-        print("Use Homebrew Python: source .venv/bin/activate", file=sys.stderr)
+        print("Ensure you are using the project virtualenv: source .venv/bin/activate", file=sys.stderr)
         sys.exit(1)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -77,6 +77,21 @@ def init_schema(conn: sqlite3.Connection) -> None:
             verse_id  INTEGER PRIMARY KEY,
             embedding FLOAT[384]
         );
+
+        CREATE TABLE IF NOT EXISTS cross_references (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_book       TEXT NOT NULL,
+            from_chapter    INTEGER NOT NULL,
+            from_verse      INTEGER NOT NULL,
+            to_book         TEXT NOT NULL,
+            to_chapter      INTEGER NOT NULL,
+            to_verse_start  INTEGER NOT NULL,
+            to_verse_end    INTEGER NOT NULL,
+            votes           INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_cross_refs_from
+        ON cross_references(from_book, from_chapter, from_verse);
     """)
     conn.commit()
 
@@ -195,6 +210,51 @@ def db_search_semantic(conn: sqlite3.Connection, query_text: str,
         """,
         params,
     ).fetchall()
+
+
+def db_get_cross_references(conn: sqlite3.Connection, translation: str,
+                            osis_id: str, chapter: int, verse: int,
+                            min_votes: Optional[int], limit: int,
+                            testament: Optional[str] = None):
+    params: list = [osis_id, chapter, verse]
+    votes_filter = ""
+    if min_votes is not None:
+        votes_filter = "AND cr.votes >= ?"
+        params.append(min_votes)
+    testament_filter = ""
+    if testament:
+        testament_filter = "AND cr.to_book IN (SELECT DISTINCT osis_id FROM books WHERE testament = ?)"
+        params.append(testament)
+    params.append(limit)
+
+    refs = conn.execute(
+        f"""
+        SELECT cr.to_book, cr.to_chapter, cr.to_verse_start, cr.to_verse_end, cr.votes
+        FROM cross_references cr
+        WHERE cr.from_book = ? AND cr.from_chapter = ? AND cr.from_verse = ?
+          {votes_filter}
+          {testament_filter}
+        ORDER BY cr.votes DESC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+
+    results = []
+    for ref in refs:
+        to_book, to_chapter, to_verse_start, to_verse_end, votes = ref
+        rows = db_get_passage(conn, translation, to_book, to_chapter, to_verse_start, to_verse_end)
+        entry: dict = {
+            "osis_id": to_book,
+            "chapter": to_chapter,
+            "verse_start": to_verse_start,
+            "verse_end": to_verse_end,
+            "votes": votes,
+        }
+        if rows:
+            entry["verses"] = [{"verse": r["verse"], "text": r["text"]} for r in rows]
+        results.append(entry)
+    return results
 
 
 def db_list_translations(conn: sqlite3.Connection):

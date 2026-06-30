@@ -5,3 +5,5 @@ bible.db-wal
 __pycache__/
 *.pyc
 .DS_Store
+data/cross-references.zip
+data/cross_references.txt

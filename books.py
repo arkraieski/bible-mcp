@@ -180,6 +180,9 @@ _EXTRA: dict[str, str] = {
 _ALIASES.update({k.lower(): v for k, v in _EXTRA.items()})
 
 
+OSIS_TO_NAME: dict[str, str] = {osis_id: name for osis_id, name, _, _ in BOOKS}
+
+
 def resolve_book(name: str) -> str | None:
     """Resolve any book name, abbreviation, or OSIS ID to its canonical OSIS ID.
 

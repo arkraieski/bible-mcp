@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastmcp import FastMCP
 
 import db
+from books import OSIS_TO_NAME
 
 DB_PATH = os.environ.get("BIBLE_DB_PATH", "bible.db")
 
@@ -22,8 +23,17 @@ async def lifespan(server: FastMCP):
         raise
     except Exception as e:
         print(f"ERROR: sqlite-vec startup check failed: {e}", file=sys.stderr)
-        print("Ensure you are using Homebrew Python: source .venv/bin/activate", file=sys.stderr)
+        print("Ensure you are using the project virtualenv: source .venv/bin/activate", file=sys.stderr)
         sys.exit(1)
+
+    if not conn.execute("SELECT 1 FROM verse_embeddings LIMIT 1").fetchone():
+        print("WARNING: No embeddings found — search_semantic will return no results.", file=sys.stderr)
+        print("  Run: python scripts/ingest.py ... (embedding generation runs automatically)", file=sys.stderr)
+
+    if not conn.execute("SELECT 1 FROM cross_references LIMIT 1").fetchone():
+        print("WARNING: Cross-reference data not loaded — get_cross_references will error.", file=sys.stderr)
+        print("  Run: python scripts/ingest_cross_references.py", file=sys.stderr)
+
     yield {}
 
 
@@ -93,6 +103,8 @@ def search_semantic(query: str, translation: str = "web", limit: int = 10,
     if testament is not None and t is None:
         return {"error": f"Unknown testament: {testament!r}. Use 'old' or 'new'."}
     conn = db.get_cached_connection(DB_PATH)
+    if not conn.execute("SELECT 1 FROM verse_embeddings LIMIT 1").fetchone():
+        return {"error": "Embedding data not loaded. Re-run scripts/ingest.py to generate embeddings."}
     rows = db.db_search_semantic(conn, query, translation, limit, t)
     return {
         "results": [
@@ -106,6 +118,40 @@ def search_semantic(query: str, translation: str = "web", limit: int = 10,
             }
             for r in rows
         ]
+    }
+
+
+@mcp.tool
+def get_cross_references(book: str, chapter: int, verse: int,
+                          translation: str = "web",
+                          testament: str = None,
+                          min_votes: int = None,
+                          limit: int = 20) -> dict:
+    """Return cross-references for a verse, sourced from the Treasury of Scripture
+    Knowledge via OpenBible.info. Results are sorted by vote count (most-confirmed
+    first). 'book' accepts full names, abbreviations, or OSIS IDs. 'translation'
+    controls which translation's text is returned alongside each reference.
+    Optional 'testament' filters returned references to 'old' or 'new' testament
+    (also accepts 'OT'/'NT'). 'min_votes' filters out low-confidence references.
+    'limit' caps the result count."""
+    t = db.resolve_testament(testament)
+    if testament is not None and t is None:
+        return {"error": f"Unknown testament: {testament!r}. Use 'old' or 'new'."}
+    osis_id = db.resolve_book(book)
+    if osis_id is None:
+        return {"error": f"Unknown book: {book!r}"}
+    conn = db.get_cached_connection(DB_PATH)
+    refs = db.db_get_cross_references(conn, translation, osis_id, chapter, verse,
+                                       min_votes, limit, t)
+    if not refs:
+        has_data = conn.execute("SELECT 1 FROM cross_references LIMIT 1").fetchone()
+        if has_data is None:
+            return {"error": "Cross-reference data not loaded. Run: python scripts/ingest_cross_references.py"}
+    for ref in refs:
+        ref["book"] = OSIS_TO_NAME.get(ref["osis_id"], ref["osis_id"])
+    return {
+        "reference": f"{OSIS_TO_NAME.get(osis_id, osis_id)} {chapter}:{verse}",
+        "cross_references": refs,
     }
 
 
