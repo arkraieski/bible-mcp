@@ -1,0 +1,6 @@
+services:
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    command: pytest tests/ -v
