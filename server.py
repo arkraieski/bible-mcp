@@ -40,12 +40,37 @@ async def lifespan(server: FastMCP):
 mcp = FastMCP("Bible", lifespan=lifespan)
 
 
+TRANSLATION_NOTE = "Only translations from list_translations() are valid (currently: web, kjv)."
+
+
+def _validate_translation(conn, translation: str) -> dict | None:
+    """Returns an error dict if `translation` isn't a loaded abbreviation, else None."""
+    available = db.db_list_translation_abbreviations(conn)
+    if translation not in available:
+        return {
+            "error": f"Unknown translation {translation!r}. "
+                     f"Available translations: {', '.join(available)}. "
+                     f"Call list_translations() for details."
+        }
+    return None
+
+
+def _note(fn):
+    """Appends TRANSLATION_NOTE to a tool's docstring. Apply below @mcp.tool."""
+    fn.__doc__ = f"{fn.__doc__} {TRANSLATION_NOTE}"
+    return fn
+
+
 @mcp.tool
+@_note
 def get_verse(translation: str, book: str, chapter: int, verse: int) -> dict:
     """Look up a specific Bible verse by reference. 'book' accepts full names,
     common abbreviations, or OSIS IDs — e.g. 'Genesis', 'Gen', 'ge', 'First Samuel',
     'Song of Songs', 'Rev' all work. Case-insensitive."""
     conn = db.get_cached_connection(DB_PATH)
+    err = _validate_translation(conn, translation)
+    if err:
+        return err
     result = db.db_get_verse(conn, translation, book, chapter, verse)
     if result is None:
         return {"error": f"Verse not found: {translation} {book} {chapter}:{verse}"}
@@ -53,11 +78,15 @@ def get_verse(translation: str, book: str, chapter: int, verse: int) -> dict:
 
 
 @mcp.tool
+@_note
 def get_passage(translation: str, book: str, chapter: int,
                 verse_start: int, verse_end: int) -> dict:
     """Retrieve a range of verses from a single chapter. 'book' accepts full names,
     common abbreviations, or OSIS IDs. Case-insensitive."""
     conn = db.get_cached_connection(DB_PATH)
+    err = _validate_translation(conn, translation)
+    if err:
+        return err
     rows = db.db_get_passage(conn, translation, book, chapter, verse_start, verse_end)
     if not rows:
         return {"error": f"No verses found: {translation} {book} {chapter}:{verse_start}-{verse_end}"}
@@ -70,6 +99,7 @@ def get_passage(translation: str, book: str, chapter: int,
 
 
 @mcp.tool
+@_note
 def search_text(translation: str, query: str, limit: int = 10,
                 testament: str = None) -> dict:
     """Full-text keyword search across all verses in a translation.
@@ -78,6 +108,9 @@ def search_text(translation: str, query: str, limit: int = 10,
     if testament is not None and t is None:
         return {"error": f"Unknown testament: {testament!r}. Use 'old' or 'new'."}
     conn = db.get_cached_connection(DB_PATH)
+    err = _validate_translation(conn, translation)
+    if err:
+        return err
     rows = db.db_search_text(conn, translation, query, limit, t)
     return {
         "results": [
@@ -95,14 +128,20 @@ def search_text(translation: str, query: str, limit: int = 10,
 
 
 @mcp.tool
+@_note
 def search_semantic(query: str, translation: str = "web", limit: int = 10,
                     testament: str = None) -> dict:
     """Semantic similarity search using sentence-transformer vector embeddings.
-    Optional 'testament' filters to 'old' or 'new' testament (also accepts 'OT'/'NT')."""
+    Embeddings are pre-computed per-translation, so results are filtered to the
+    given 'translation'. Optional 'testament' filters to 'old' or 'new' testament
+    (also accepts 'OT'/'NT')."""
     t = db.resolve_testament(testament)
     if testament is not None and t is None:
         return {"error": f"Unknown testament: {testament!r}. Use 'old' or 'new'."}
     conn = db.get_cached_connection(DB_PATH)
+    err = _validate_translation(conn, translation)
+    if err:
+        return err
     if not conn.execute("SELECT 1 FROM verse_embeddings LIMIT 1").fetchone():
         return {"error": "Embedding data not loaded. Re-run scripts/ingest.py to generate embeddings."}
     rows = db.db_search_semantic(conn, query, translation, limit, t)
@@ -122,6 +161,7 @@ def search_semantic(query: str, translation: str = "web", limit: int = 10,
 
 
 @mcp.tool
+@_note
 def get_cross_references(book: str, chapter: int, verse: int,
                           translation: str = "web",
                           testament: str = None,
@@ -141,6 +181,9 @@ def get_cross_references(book: str, chapter: int, verse: int,
     if osis_id is None:
         return {"error": f"Unknown book: {book!r}"}
     conn = db.get_cached_connection(DB_PATH)
+    err = _validate_translation(conn, translation)
+    if err:
+        return err
     refs = db.db_get_cross_references(conn, translation, osis_id, chapter, verse,
                                        min_votes, limit, t)
     if not refs:
@@ -164,12 +207,14 @@ def list_translations() -> dict:
 
 
 @mcp.tool
+@_note
 def list_books(translation: str) -> dict:
     """List all books for a given translation with testament grouping."""
     conn = db.get_cached_connection(DB_PATH)
+    err = _validate_translation(conn, translation)
+    if err:
+        return err
     rows = db.db_list_books(conn, translation)
-    if not rows:
-        return {"error": f"Translation not found: {translation}"}
     return {"books": [dict(r) for r in rows]}
 
 

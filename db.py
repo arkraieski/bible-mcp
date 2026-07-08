@@ -263,6 +263,15 @@ def db_list_translations(conn: sqlite3.Connection):
     ).fetchall()
 
 
+def db_list_translation_abbreviations(conn: sqlite3.Connection) -> list[str]:
+    return [
+        row[0]
+        for row in conn.execute(
+            "SELECT abbreviation FROM translations ORDER BY id"
+        ).fetchall()
+    ]
+
+
 def db_list_books(conn: sqlite3.Connection, translation: str):
     return conn.execute(
         """
