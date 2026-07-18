@@ -65,3 +65,9 @@ Cross-reference data sourced from **[OpenBible.info](https://openbible.info)** (
 ```bash
 .venv/bin/python scripts/ingest.py --file data/my.xml --translation abc --name "My Translation"
 ```
+
+## License
+
+MIT © 2026 Alexander Kraieski — see [LICENSE](LICENSE).
+
+The MIT license covers this project's code. The bundled Bible text (WEB, KJV) is public domain. Cross-reference data (not bundled) is © [OpenBible.info](https://openbible.info), licensed [CC BY 4.0](https://openbible.info/source.htm).
